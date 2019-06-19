@@ -1,0 +1,192 @@
+---
+title: "Understanding FP_Scanner Classification"
+author: "Kinkade Darling"
+date: "6/12/2019"
+output:
+  html_document:
+    highlight: 'haddock'
+    self_contained: true
+    thumbnails: true
+    gallery: true
+    fig_width: 4
+    fig_height: 4
+    df_print: kable
+---
+***
+<center>
+![FigName](clear-logo.jpg)
+</center>
+***
+# Introduction
+***
+***
+This report is related to the javascript algorithm fp_scanner created by Antoine Vastel during his PhD program at the University of Lille in France. This algorithm attempts to read the user agent string associated with a given user’s machine and its related attributes. It tracks this string and attempts to create a ‘fingerprint’ based on the features found in the string. The end goal is to utilize these fingerprints to determine whether certain attributes can be classified as bot/script activity. The activity is classified as consistent, inconsistent, or unsure based upon Antoine’s code. 
+
+The work presented here is related to finding any issues related to Antoine’s algorithm and the existence of false positives. These instances are classified as a bot, when in actuality it is human traffic. 
+
+The data being processed in this work is propriety data gathered by ClearRTB. We run this script and gather the user agent strings and all associated variables. After gathering the variables we determine a ‘bot_score’. If any variable is deemed inconsistent, we then classify the activity as bot traffic and assign a score of zero (0). If found to be consistent, it receives a score of one hundred (100). if unsure, it receives a calculated score based upon how many unsure variables exist, which is generally in a range of ninety - one hundred (90 - 100).  
+
+I began analyzing this data with the following query. This query gathers data grouped by unique user agent strings and bot_score. The variables gathered are all values classified by fp_scanner and other variables related to the user agent string. 
+
+
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+library(tidyverse)
+library(rmdformats)
+library(knitr)
+library(kableExtra)
+```
+### Query
+*** 
+<center>
+![FigName](gb_uas_class.png)
+</center>
+### Processing
+***
+***
+The code chunk that follows is related to the processing of the data gathered by the query. Initially I created a variable related to bot_score called 'classification'. Classifcation has three levels, Human, Bot, or unsure to match the associated bot_score. 
+
+The data gathered by the initial query is quite large, about 120,000 unique user agent strings. With this many variables it would be difficult to gain accurate insight. I slimmed the dataset down to the 20 highest count user agent strings by selecting user agent strings with greater than 90,000 instances. This allows for me to determine which strings are related to the largest scores and understand what their attributed classifications are. More investigation led to me seeing that some of the top 20 variables are actually duplicates. I created a corresonding variable for this as well. 
+
+***
+```{r - Processing}
+# Understanding Misclassifying Variables Within Grouped User_Agent_Strings ----
+gbuas<-read.csv('group_by_uas.csv')
+gbuas<-gbuas%>%
+  mutate(classification = ifelse(bot_score == 100, 'Human',
+                                 ifelse(bot_score == 0, 'Bot',"Unsure")))
+
+gbuas_large <-gbuas%>%
+  filter(uas_count > 90000) 
+
+gbuas_large$bot_score<-factor(gbuas_large$bot_score)
+gbuas_large$classification<-factor(gbuas_large$classification)
+gbuas_large$user_agent_string<-factor(gbuas_large$user_agent_string)
+
+gbuas_large<-gbuas_large%>%
+              mutate(uas_id = sort(strtoi(rownames(gbuas_large))),
+                     uas_count =sort(uas_count,TRUE))%>%
+              select(user_agent_string,uas_id,everything())
+
+
+gbuas_focus<-gbuas_large%>%
+  mutate(duplicate = ifelse(duplicated(user_agent_string),'Yes','No'),
+         uas_id = paste("UAS", gbuas_large$uas_id, sep = ""))%>%
+  select(user_agent_string,uas_id,uas_count,classification,duplicate,everything(),
+         -c(bot_score,in_view_time,video_codecs,transparent_pixel,sequentum,
+            selenium_driver,chr_debug_tools,phantom_language,phantom_overflow,phantom_websocket))
+
+ua_strings <-as.data.frame(gbuas_focus[,c(1:5)])
+ua_strings[,'UAS_English']<-NA
+ua_strings<-ua_strings%>%
+              mutate(duplicate = duplicated(user_agent_string))%>%
+              select(user_agent_string,UAS_English,everything())
+
+
+ua_strings[1,2]<-as.character('Webkit based browser on iOS 12.2 Apple iPad, Mobile Build:15E148')
+ua_strings[2,2]<-as.character('Webkit based browser on iOS 12.2 Apple iPhone, Mobile Build:15E148 ')
+ua_strings[3,2]<-as.character('Safari 12.1 on iOS 12.2 Apple iPhone, Mobile Build:15E148')
+ua_strings[4,2]<-as.character('Webkit based browser on iOS 12.3 Apple iPhone, Mobile Build:15E148')
+ua_strings[5,2]<-as.character('Chrome 74 on Android 9 Samsung SM-G960U')
+ua_strings[6,2]<-as.character('Edge 42 on Windows 10')
+ua_strings[7,2]<-as.character('Edge 44 on Windows 10')
+ua_strings[8,2]<-as.character('Chrome 74.0.3729.131 on Windows 10')
+ua_strings[9,2]<-as.character('Chrome 74.0.3729.131 on Windows 10')
+ua_strings[10,2]<-as.character('Chrome 74.0.3729.157 on Windows 10')
+ua_strings[11,2]<-as.character('Chrome 74.0.3729.157 on Windows 10')
+ua_strings[12,2]<-as.character('Chrome 74.0.3729.169 on Windows 10')
+ua_strings[13,2]<-as.character('Chrome 74.0.3729.169 on Windows 10')
+ua_strings[14,2]<-as.character('Firefox 66 on Windows 10')
+ua_strings[15,2]<-as.character('Firefox 67 on Windows 10')
+ua_strings[16,2]<-as.character('Chrome 74.0.3729.131 on Windows 7')
+ua_strings[17,2]<-as.character('Chrome 74.0.3729.157 on Windows 7')
+ua_strings[18,2]<-as.character('Chrome 74.0.3729.157 on Windows 7')
+ua_strings[19,2]<-as.character('Chrome 74.0.3729.169 on Windows 7')
+ua_strings[20,2]<-as.character('Chrome 74.0.3729.169 on Windows 7')
+ua_strings_humans<-ua_strings%>%
+              mutate(duplicate = duplicated(user_agent_string))%>%
+              filter(classification != 'Bot')%>%
+              select(UAS_English,everything(),-user_agent_string)
+ua_strings_bots<-ua_strings%>%
+              mutate(duplicate = duplicated(user_agent_string))%>%
+              filter(classification == 'Bot')%>%
+              select(UAS_English,everything(),-user_agent_string)
+
+```
+# Understanding User Agent Strings
+***
+***
+The following tables describe user agent strings classified as either humans or bots. These strings are all given variables worth describing. The identifier associated with a unique row is uas_id. The number of instances seen in the data related to a string is uas_count. Classification is again what the system has deemed the activity. Finally, duplicate is a check for whether a given string has a duplicate in this subset of 20 strings. 
+
+These duplicate pairs are as follows:
+**(UAS8/UAS9), (UAS10/UAS11), (UAS12/UAS13), (UAS17/UAS18), (UAS19/UAS20)**
+***
+
+### Highest Count User Agent Strings Classified as Humans
+***
+***
+An interesting takeaway from this section is a common theme among user agent strings. 7/8 strings here are desktop platforms. This should not come to a suprise. The fp_scanner algorithm is centered around identifying traffic based on desktop and in the major browsers, Chrome, Safari, and Firefox. The only mobile user agent string is associated with an iPhone. I would be willing to assume the traffic was classified as human in this instance due to Safari browser being used. 
+
+***
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+kable(ua_strings_humans)%>%
+  kable_styling("striped", full_width = F)%>%
+  row_spec(1:8, bold = T, color = "white", background = "#2374B0")
+```
+
+### Highest Count User Agent Strings Classified as Bots
+***
+***
+This table is associated with activity classified as bot traffic. The variables are the same, but as you can see the strings are much different. While the majority here is still based on desktop traffic. The first four strings are associated with mobile or tablet traffic. These top four have a combined total of 3.59 million of instances. What this proves is that the fp_scanner does well with desktop activity, but generally fails with mobile traffic classification. 
+
+***
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+kable(ua_strings_bots)%>%
+  kable_styling("striped", full_width = F)%>%
+  row_spec(1:12, bold = T, color = "white", background = "red")
+```
+
+### Misclassifying Variables
+***
+***
+The following visual showcases failing variables attributed to the 12 bot classifications. What we are able to gain from this visual is the understanding of what variables are described as inconsistent by the fp_scanner. While this is not a overall distribution of the greater data, it is a distribution based on these variables. The variables below are not the only given checks in the fp_scanner. Eight variables were removed where none of the strings in focus were failing. The remaining variables were included because of at least one string failing because of it. 
+
+For transparency, I have listed these items above the next chunk of code.  
+
+**Removed variables are as follows:**    
+video_codecs, transparent_pixel, sequentum, selenium_driver, chr_debug_tools, phantom_language, phantom_overflow, phantom_websocket  
+
+**Retained variables are as follows:**    
+phantom_ua, phantom_properties, phantom_etsl, mq_screen, phantom_window_height, headchr_ua, webdriver, headchr_chrom_obj,
+pheadchr_permissions, headchr_plugins, headchr_iframe, chr_battery, chr_memory   
+
+**Notes on the Visual**  
+I want to apologize for the poor formatting of the output. The data proved difficult to model in this way. After too much time attempting to remedy the issue I decided it was adequate enough to understand the overall message.  
+***
+```{r fig.show='hide'}
+gbuas_focus<-gbuas_focus%>%
+            filter(classification != 'Bot')
+
+col<-names(gbuas_focus[,6:18])
+
+gbuas_focus %>%
+  gather(key, value, one_of(col))%>%
+  ggplot() +
+  geom_point(aes(x=key, y=value), size=2) +
+  coord_flip() +
+  facet_wrap(~uas_id) +
+  labs(y='Score', x='Variable', title="Understanding Misclassifying Variables")
+
+```
+<center>
+![FigName](Rplot04.png)
+</center>
+# Next Steps and Insights
+***
+***
+The following action items are what should be implemented in a new interation of the fp_scanner algorithm. The After these initial changes are made, it will be much easier to understand what activity is truely bot activity.
+
+### Action Items  
+
+**REDACTED TO ENSURE SECURITY**
+
+***

@@ -1,0 +1,112 @@
+---
+title: "Bot Classification"
+author: "Kinkade Darling"
+date: "5/22/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE,warning=FALSE,message=FALSE}
+
+library(tidyverse)
+library(knitr)
+library(C50)
+library(caret)
+library(e1071)
+library(partykit)
+
+opts_knit$set(root.dir = '~/Desktop/ClearRTB/Clear_Project/datasets')
+
+
+theme_update(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+
+```{r - EDA}
+
+bot_tests<-read.csv("bot_tests.csv")
+bot_tests_BIG<-read.csv('bot_tests_BIG.csv')
+
+
+
+bot_tests<-bot_tests%>%
+              mutate(classification = ifelse(bot_score == 100, 'Human',
+                                      ifelse(bot_score == 0, 'Bot','Unsure'))
+                    )%>%
+              select(-c(id,uuid,time_record,bot_score))
+
+bot_tests$classification<-factor(bot_tests$classification)
+
+sub_bot_tests<-bot_tests[1:50000,]
+
+bot_tests_BIG<-bot_tests_BIG%>%
+                  mutate(classification = ifelse(bot_score == 100, 'Human',
+                                          ifelse(bot_score == 0, 'Bot','Unsure'))
+                           )%>%
+                  select(-c(id,uuid,time_record,bot_score))
+
+bot_tests_BIG<-bot_tests_BIG%>%
+                      select(1,classification , everything())
+
+
+table(bot_tests$phantom_properties) # - 2889 'Bots'
+table(bot_tests$phantom_etsl) # - 72352 'Bots' IMPORTANT VARIABLE
+table(bot_tests$phantom_language) # - 0 'Bots'
+table(bot_tests$phantom_websocket) # - 0 'Bots'
+table(bot_tests$mq_screen) # - 21810 'Bots'
+table(bot_tests$phantom_overflow) # - 4964 'Bots'
+table(bot_tests$phantom_window_height) # - 28476 'Bots'
+table(bot_tests$headchr_ua) # - 56534 'Bots'
+table(bot_tests$webdriver) # -  85388 'Bots' IMPORTANT VARIABLE
+table(bot_tests$headchr_chrome_obj) # - 85340 'Bots' IMPORTANT VARIABLE
+table(bot_tests$headchr_plugins) # - 307702 'Bots' IMPORTANT VARIABLE
+table(bot_tests$headchr_iframe) # - 94608 'Bots' IMPORTANT VARIABLE
+table(bot_tests$chr_debug_tools) # - 61257 'Bots' IMPORTANT VARIABLE
+table(bot_tests$selenium_driver) # - 10 'Bots'
+table(bot_tests$chr_battery) # - 84 'Bots'
+table(bot_tests$chr_memory) # - 152127 'Bots' IMPORTANT VARIABLE
+table(bot_tests$sequentum) # - 0 'Bots'
+table(bot_tests$video_codecs) # - 1943 'Bots'
+
+table(bot_tests_BIG$phantom_properties) # - 9152 'Bots'
+table(bot_tests_BIG$phantom_etsl) # - 1002112 'Bots' IMPORTANT VARIABLE
+table(bot_tests_BIG$phantom_language) # - 0 'Bots'
+table(bot_tests_BIG$phantom_websocket) # - 0 'Bots'
+table(bot_tests_BIG$mq_screen) # - 464879 'Bots'
+table(bot_tests_BIG$phantom_overflow) # - 18480 'Bots'
+table(bot_tests_BIG$phantom_window_height) # - 153599 'Bots'
+table(bot_tests_BIG$headchr_ua) # - 145083 'Bots'
+table(bot_tests_BIG$webdriver) # -  595081 'Bots' IMPORTANT VARIABLE
+table(bot_tests_BIG$headchr_chrome_obj) # - 715573 'Bots' IMPORTANT VARIABLE
+table(bot_tests_BIG$headchr_plugins) # - 4065239 'Bots' IMPORTANT VARIABLE
+table(bot_tests_BIG$headchr_iframe) # - 1386854 'Bots' IMPORTANT VARIABLE
+table(bot_tests_BIG$chr_debug_tools) # - 161393 'Bots'
+table(bot_tests_BIG$selenium_driver) # - 35 'Bots'
+table(bot_tests_BIG$chr_battery) # - 647 'Bots'
+table(bot_tests_BIG$chr_memory) # - 2663153 'Bots' IMPORTANT VARIABLE
+table(bot_tests_BIG$sequentum) # - 0 'Bots' 
+table(bot_tests_BIG$video_codecs) # - 23838 'Bots' 
+
+
+```
+
+# Decision Tree Experiments
+```{r}
+set.seed(47)
+rows<-createDataPartition(bot_tests_BIG$classification,p=.8,list=F)
+train<-bot_tests_BIG[rows,]
+test<-bot_tests_BIG[-rows,]
+
+set.seed(47)
+
+c5<-train(y= factor(train$classification),
+          x= dplyr::select(train, -classification),
+          method="C5.0Tree")
+
+
+c5_predictions <- predict(c5, newdata = test)
+
+confusionMatrix(c5_predictions,factor(test$classification))
+
+# Remove 'Unsure' variables
+
+```
+
